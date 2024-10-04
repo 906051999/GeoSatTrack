@@ -1,11 +1,10 @@
 import { useRef, forwardRef, useMemo } from 'react'
-import { useFrame } from '@react-three/fiber'
 import { Html } from '@react-three/drei'
 import * as THREE from 'three'
+import Location from './Location'
 
-const Earth = forwardRef(({ rotation, axialTilt = 23.5 }, ref) => {
+const Earth = forwardRef(({ devicePosition }, ref) => {
   const meshRef = useRef()
-  const groupRef = useRef()
 
   const latitudeLines = useMemo(() => {
     const lines = []
@@ -146,15 +145,8 @@ const Earth = forwardRef(({ rotation, axialTilt = 23.5 }, ref) => {
     });
   }, []);
 
-  useFrame(() => {
-    if (groupRef.current) {
-      groupRef.current.rotation.y = rotation
-      groupRef.current.rotation.x = axialTilt * (Math.PI / 180)
-    }
-  })
-
   return (
-    <group ref={groupRef}>
+    <group ref={ref}>
       <mesh ref={meshRef}>
         <sphereGeometry args={[1, 64, 64]} />
         <meshPhongMaterial
@@ -176,6 +168,7 @@ const Earth = forwardRef(({ rotation, axialTilt = 23.5 }, ref) => {
         <bufferGeometry attach="geometry" {...new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, -1, 0), new THREE.Vector3(0, 1, 0)])} />
         <lineBasicMaterial attach="material" color="#FF0000" />
       </line>
+      {devicePosition && <Location position={devicePosition} />}
     </group>
   )
 })

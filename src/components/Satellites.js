@@ -1,8 +1,7 @@
 import { useRef, useEffect } from 'react'
-import { useFrame } from '@react-three/fiber'
 import * as THREE from 'three'
 
-export default function Satellites({ data, earthRotation, axialTilt = 23.5 }) {
+export default function Satellites({ data }) {
   const groupRef = useRef()
 
   useEffect(() => {
@@ -18,13 +17,6 @@ export default function Satellites({ data, earthRotation, axialTilt = 23.5 }) {
       })
     }
   }, [data])
-
-  useFrame(() => {
-    if (groupRef.current) {
-      groupRef.current.rotation.y = earthRotation
-      groupRef.current.rotation.x = axialTilt * (Math.PI / 180)
-    }
-  })
 
   return <group ref={groupRef} />
 }

@@ -10,7 +10,7 @@ const STATUS = {
   ERROR: { color: 'bg-red-500', text: '定位失败' }
 }
 
-export default function LocationStatus({ setDevicePosition, setEarthRotation, updateCameraPosition }) {
+export default function LocationStatus({ setDevicePosition, setEarthRotation }) {
   const [status, setStatus] = useState('IDLE')
   const [error, setError] = useState(null)
   const [position, setPosition] = useState(null)
@@ -23,17 +23,27 @@ export default function LocationStatus({ setDevicePosition, setEarthRotation, up
   const handleLocate = async () => {
     setStatus('REQUESTING')
     try {
+      // 1. 尝试使用设备定位API
       const pos = await getCurrentPosition()
       updatePosition(pos)
     } catch (error) {
-      console.warn("GPS定位失败，尝试IP定位:", error)
+      console.warn("设备定位失败，尝试IP定位:", error)
       try {
+        // 2. 尝试使用IP定位
         const { latitude, longitude } = await fetch('https://ipapi.co/json/').then(res => res.json())
         updatePosition({ coords: { latitude, longitude } })
       } catch (error) {
-        console.error("IP定位也失败:", error)
-        setStatus('ERROR')
-        setError("无法获取位置信息。请确保已授予位置权限或检查网络连接。")
+        console.warn("IP定位失败，尝试备用定位服务:", error)
+        try {
+          // 3. 尝试使用备用定位服务
+          const response = await fetch('https://geolocation-db.com/json/')
+          const data = await response.json()
+          updatePosition({ coords: { latitude: data.latitude, longitude: data.longitude } })
+        } catch (error) {
+          console.error("所有定位方法均失败:", error)
+          setStatus('ERROR')
+          setError("无法获取位置信息。请确保已授予位置权限或检查网络连接。")
+        }
       }
     }
   }
@@ -42,9 +52,8 @@ export default function LocationStatus({ setDevicePosition, setEarthRotation, up
     setPosition({ latitude, longitude })
     setDevicePosition({ latitude, longitude })
     setStatus('SUCCESS')
-    setEarthRotation(longitude * Math.PI / 180)
-    updateCameraPosition(latitude, longitude)
-  }, [setDevicePosition, setEarthRotation, updateCameraPosition])
+    // 移除对 setEarthRotation 和 updateCameraPosition 的调用
+  }, [setDevicePosition])
 
   return (
     <motion.div 
