@@ -1,175 +1,108 @@
-import { useRef, forwardRef, useMemo } from 'react'
-import { Html } from '@react-three/drei'
-import * as THREE from 'three'
-import Location from './Location'
+import React, { useRef, useEffect, useMemo } from 'react'
+import { useThree, useFrame } from '@react-three/fiber'
+import { OrbitControls } from '@react-three/drei'
+import ThreeGlobe from 'three-globe'
+import { feature } from 'topojson-client'
+import worldData from '../data/countries-110m.json'
 
-const Earth = forwardRef(({ devicePosition }, ref) => {
-  const meshRef = useRef()
+function Globe({ isRotationLocked, devicePosition }) {
+  const globeRef = useRef()
+  const { scene } = useThree()
 
-  const latitudeLines = useMemo(() => {
-    const lines = []
-    for (let i = -80; i <= 80; i += 20) {
-      const geometry = new THREE.BufferGeometry()
-      const points = []
-      for (let j = 0; j <= 360; j++) {
-        const phi = i * (Math.PI / 180)
-        const theta = j * (Math.PI / 180)
-        const x = Math.cos(theta) * Math.cos(phi)
-        const y = Math.sin(phi)
-        const z = Math.sin(theta) * Math.cos(phi)
-        points.push(new THREE.Vector3(x, y, z))
-      }
-      geometry.setFromPoints(points)
-      lines.push(<line key={`lat-${i}`} geometry={geometry}>
-        <lineBasicMaterial color="#00FFFF" opacity={0.3} transparent />
-      </line>)
+  const markerSvg = useMemo(() => {
+    const svg = `
+      <svg viewBox="-4 0 36 36">
+        <path fill="#FF4500" d="M14,0 C21.732,0 28,5.641 28,12.6 C28,23.963 14,36 14,36 C14,36 0,24.064 0,12.6 C0,5.641 6.268,0 14,0 Z"></path>
+        <circle fill="#fff" cx="14" cy="14" r="7"></circle>
+      </svg>
+    `
+    return `data:image/svg+xml;base64,${btoa(svg)}`
+  }, [])
+
+  useEffect(() => {
+    const globe = new ThreeGlobe()
+      // .globeImageUrl('//unpkg.com/three-globe/example/img/earth-blue-marble.jpg')
+      // .bumpImageUrl('//unpkg.com/three-globe/example/img/earth-topology.png')
+      .showAtmosphere(true)
+      .atmosphereColor('#3a228a')
+      .atmosphereAltitude(0.25)
+
+    // 添加国家边界
+    const countries = feature(worldData, worldData.objects.countries)
+    globe.polygonsData(countries.features)
+      .polygonAltitude(0.01)
+      .polygonCapColor(() => 'rgba(200, 200, 200, 0.3)')
+      .polygonSideColor(() => 'rgba(150, 150, 150, 0.3)')
+      .polygonStrokeColor(() => '#111')
+
+    // 设置标签和点标记样式
+    globe
+      .labelLat(d => d.lat)
+      .labelLng(d => d.lng)
+      .labelText(d => d.text)
+      .labelSize(d => d.size)
+      .labelDotRadius(d => d.dotRadius)
+      .labelColor(() => '#ffffff')
+      .labelResolution(3)
+      .pointsData([])
+      .pointLat('lat')
+      .pointLng('lng')
+      .pointColor(() => '#ff0000')
+      .pointAltitude(0.1)
+      .pointRadius(0.05)
+      .pointsMerge(true)
+      .htmlElementsData([])
+      .htmlElement(d => {
+        const el = document.createElement('div')
+        el.innerHTML = `<img src="${markerSvg}" style="width: 28px; height: 28px; position: absolute; transform: translate(-50%, -100%);">`
+        return el
+      })
+
+    globeRef.current = globe
+    scene.add(globe)
+
+    return () => {
+      scene.remove(globe)
     }
-    return lines
-  }, [])
+  }, [scene, markerSvg])
 
-  const longitudeLines = useMemo(() => {
-    const lines = []
-    for (let i = 0; i < 360; i += 20) {
-      const geometry = new THREE.BufferGeometry()
-      const points = []
-      for (let j = -90; j <= 90; j++) {
-        const phi = j * (Math.PI / 180)
-        const theta = i * (Math.PI / 180)
-        const x = Math.cos(theta) * Math.cos(phi)
-        const y = Math.sin(phi)
-        const z = Math.sin(theta) * Math.cos(phi)
-        points.push(new THREE.Vector3(x, y, z))
-      }
-      geometry.setFromPoints(points)
-      lines.push(<line key={`lon-${i}`} geometry={geometry}>
-        <lineBasicMaterial color="#00FFFF" opacity={0.3} transparent />
-      </line>)
+  useEffect(() => {
+    if (globeRef.current && devicePosition) {
+      const { latitude, longitude } = devicePosition
+      globeRef.current.labelsData([{
+        lat: latitude,
+        lng: longitude,
+        text: '当前位置',
+        size: 0.8,
+        dotRadius: 0.5
+      }])
+      globeRef.current.pointsData([{ lat: latitude, lng: longitude }])
+      globeRef.current.htmlElementsData([{ lat: latitude, lng: longitude }])
     }
-    return lines
-  }, [])
+  }, [devicePosition])
 
-  const equator = useMemo(() => {
-    const geometry = new THREE.BufferGeometry()
-    const points = []
-    for (let i = 0; i <= 360; i++) {
-      const theta = i * (Math.PI / 180)
-      points.push(new THREE.Vector3(Math.cos(theta), 0, Math.sin(theta)))
+  useFrame(({ clock }) => {
+    if (globeRef.current && !isRotationLocked) {
+      globeRef.current.rotation.y += 0.001
     }
-    geometry.setFromPoints(points)
-    return <line geometry={geometry}>
-      <lineBasicMaterial color="#FF00FF" linewidth={2} />
-    </line>
-  }, [])
-
-  const poles = useMemo(() => {
-    const northPole = new THREE.Vector3(0, 1.03, 0)
-    const southPole = new THREE.Vector3(0, -1.03, 0)
-    const geometry = new THREE.BufferGeometry().setFromPoints([northPole, southPole])
-    return (
-      <>
-        <line geometry={geometry}>
-          <lineBasicMaterial color="#FFFFFF" linewidth={2} />
-        </line>
-        <Html position={[0, 1.1, 0]} center>
-          <div style={{
-            color: '#E0F7FA',
-            fontSize: '18px',
-            fontWeight: '500',
-            whiteSpace: 'nowrap',
-            textShadow: '0 0 5px rgba(224, 247, 250, 0.7)',
-            letterSpacing: '1px'
-          }}>
-            N
-          </div>
-        </Html>
-        <Html position={[0, -1.1, 0]} center>
-          <div style={{
-            color: '#FFF3E0',
-            fontSize: '18px',
-            fontWeight: '500',
-            whiteSpace: 'nowrap',
-            textShadow: '0 0 5px rgba(255, 243, 224, 0.7)',
-            letterSpacing: '1px'
-          }}>
-            S
-          </div>
-        </Html>
-      </>
-    )
-  }, [])
-
-  const timeZones = useMemo(() => {
-    const lines = []
-    for (let i = 0; i < 24; i++) {
-      const geometry = new THREE.BufferGeometry()
-      const points = []
-      const longitude = i * 15 - 180
-      for (let j = -90; j <= 90; j += 5) {
-        const phi = j * (Math.PI / 180)
-        const theta = longitude * (Math.PI / 180)
-        const x = Math.cos(theta) * Math.cos(phi)
-        const y = Math.sin(phi)
-        const z = Math.sin(theta) * Math.cos(phi)
-        points.push(new THREE.Vector3(x, y, z))
-      }
-      geometry.setFromPoints(points)
-      lines.push(<line key={`tz-${i}`} geometry={geometry}>
-        <lineBasicMaterial color="#00FF00" opacity={0.2} transparent />
-      </line>)
+    
+    // 添加脉动效果
+    if (globeRef.current && globeRef.current.pointsMaterial) {
+      globeRef.current.pointsMaterial.size = 0.05 + Math.sin(clock.getElapsedTime() * 2) * 0.02
     }
-    return lines
-  }, [])
+  })
 
-  const timeZoneLabels = useMemo(() => {
-    const radius = 1.5;
-    return Array.from({ length: 24 }, (_, i) => {
-      const angle = (i / 24) * Math.PI * 2;
-      const x = Math.cos(angle) * radius;
-      const z = Math.sin(angle) * radius;
-      let hour = (i + 12) % 24;
-      let label = hour === 0 ? 'UTC' : hour > 12 ? `UTC-${24 - hour}` : `UTC+${hour}`;
-      return (
-        <Html key={`tz-label-${i}`} position={[x, radius, z]} center>
-          <div style={{ 
-            color: '#FFFFFF', 
-            fontSize: '12px', 
-            whiteSpace: 'nowrap', 
-            textShadow: '0 0 4px rgba(255, 255, 255, 0.7)',
-            fontFamily: 'Arial, sans-serif',
-            fontWeight: 'bold',
-          }}>
-            {label}
-          </div>
-        </Html>
-      );
-    });
-  }, []);
+  return null
+}
 
+const Earth = React.forwardRef(({ devicePosition, isRotationLocked }, ref) => {
   return (
-    <group ref={ref}>
-      <mesh ref={meshRef}>
-        <sphereGeometry args={[1, 64, 64]} />
-        <meshPhongMaterial
-          color="#001133"
-          emissive="#001133"
-          specular="#0044FF"
-          shininess={10}
-          opacity={0.9}
-          transparent
-        />
-      </mesh>
-      {latitudeLines}
-      {longitudeLines}
-      {equator}
-      {poles}
-      {timeZones}
-      {timeZoneLabels}
-      <line>
-        <bufferGeometry attach="geometry" {...new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, -1, 0), new THREE.Vector3(0, 1, 0)])} />
-        <lineBasicMaterial attach="material" color="#FF0000" />
-      </line>
-      {devicePosition && <Location position={devicePosition} />}
-    </group>
+    <>
+      <ambientLight intensity={0.5} />
+      <directionalLight position={[1, 1, 1]} intensity={0.6} />
+      <Globe isRotationLocked={isRotationLocked} devicePosition={devicePosition} />
+      <OrbitControls ref={ref} enableDamping dampingFactor={0.25} enableZoom />
+    </>
   )
 })
 
